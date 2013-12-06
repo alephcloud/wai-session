@@ -5,9 +5,14 @@ import Data.Unique (newUnique, hashUnique)
 import Data.Ratio (numerator, denominator)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Data.String (fromString)
-import Control.Monad.Trans.Class (lift)
+import Control.Monad.IO.Class (liftIO)
 import Network.HTTP.Types (ResponseHeaders)
+#if MIN_VERSION_wai(2,0,0)
+import Network.Wai (Middleware, vault, requestHeaders)
+import Network.Wai.Internal (Response(..))
+#else
 import Network.Wai (Middleware, Request(..), Response(..))
+#endif
 import Web.Cookie (parseCookies, renderSetCookie, SetCookie(..))
 
 #if MIN_VERSION_vault(0,3,0)
@@ -39,9 +44,9 @@ withSession ::
 	-- ^ 'Data.Vault.Vault' key to use when passing the session through
 	-> Middleware
 withSession sessions cookieName cookieDefaults vkey app req = do
-	(session, getNewCookie) <- lift $ sessions $ lookup cookieName =<< cookies
+	(session, getNewCookie) <- liftIO . sessions $ lookup cookieName =<< cookies
 	resp <- app (req {vault = Vault.insert vkey session (vault req)})
-	newCookieVal <- lift getNewCookie
+	newCookieVal <- liftIO getNewCookie
 	return $ mapHeader (\hs -> (setCookie, newCookie newCookieVal):hs) resp
 	where
 	newCookie v = Builder.toByteString $ renderSetCookie $ cookieDefaults {
